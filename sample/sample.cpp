@@ -1,12 +1,3 @@
-# satella
-C++ Task Library
-
-# usage example
-
-see [./sample/sample.cpp](./sample/sample.cpp)
-
-```cpp:sample.cpp
-
 #include <iostream>
 #include <thread>
 
@@ -137,5 +128,3 @@ int main()
 
     cts.cancel();
 }
-
-```
