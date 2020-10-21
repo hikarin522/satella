@@ -1,0 +1,11 @@
+<map id="include/satella/util.hpp" name="include/satella/util.hpp">
+<area shape="rect" id="node1" title=" " alt="" coords="343,5,494,32"/>
+<area shape="rect" id="node2" href="$blocking__queue_8hpp.html" title=" " alt="" coords="5,393,163,435"/>
+<area shape="rect" id="node4" href="$cancellation_8hpp.html" title=" " alt="" coords="233,319,436,345"/>
+<area shape="rect" id="node5" href="$future_8hpp.html" title=" " alt="" coords="275,155,442,181"/>
+<area shape="rect" id="node6" href="$promise_8hpp.html" title=" " alt="" coords="509,237,689,263"/>
+<area shape="rect" id="node7" href="$task_8hpp.html" title=" " alt="" coords="562,319,721,345"/>
+<area shape="rect" id="node9" href="$state_8hpp.html" title=" " alt="" coords="397,80,560,107"/>
+<area shape="rect" id="node3" href="$satella_8hpp.html" title=" " alt="" coords="353,483,525,509"/>
+<area shape="rect" id="node8" href="$shared__future_8hpp.html" title=" " alt="" coords="285,229,433,271"/>
+</map>
