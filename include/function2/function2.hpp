@@ -67,6 +67,33 @@
 #include <exception>
 #endif
 
+#if defined(__has_include)
+#if __has_include(<boost/config.hpp>)
+#include <boost/config.hpp>
+#define FU2_CXX14_CONSTEXPR BOOST_CXX14_CONSTEXPR
+#endif
+#endif
+#ifndef FU2_CXX14_CONSTEXPR
+#if defined(__cpp_constexpr) && (__cpp_constexpr >= 201304)
+#define FU2_CXX14_CONSTEXPR constexpr
+#else
+#define FU2_CXX14_CONSTEXPR
+#endif
+#endif
+
+#if defined(__has_include)
+#if __has_include(<boost/config.hpp>) && !defined(BOOST_NO_CXX11_STD_ALIGN)
+using std::align;
+#elif __has_include(<boost/align.hpp>)
+#include <boost/align.hpp>
+using boost::alignment::align;
+#else
+#define FU2_NO_CXX11_STD_ALIGN
+#endif
+#else
+#define FU2_NO_CXX11_STD_ALIGN
+#endif
+
 /// Hint for the compiler that this point should be unreachable
 #if defined(_MSC_VER)
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
@@ -74,10 +101,13 @@
 #elif defined(__GNUC__)
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define FU2_DETAIL_UNREACHABLE_INTRINSIC() __builtin_unreachable()
-#elif defined(__has_builtin) && __has_builtin(__builtin_unreachable)
+#elif defined(__has_builtin)
+#if __has_builtin(__builtin_unreachable)
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define FU2_DETAIL_UNREACHABLE_INTRINSIC() __builtin_unreachable()
-#else
+#endif
+#endif
+#ifndef FU2_DETAIL_UNREACHABLE_INTRINSIC
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define FU2_DETAIL_UNREACHABLE_INTRINSIC() abort()
 #endif
@@ -89,10 +119,13 @@
 #elif defined(__GNUC__)
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define FU2_DETAIL_TRAP() __builtin_trap()
-#elif defined(__has_builtin) && __has_builtin(__builtin_trap)
+#elif defined(__has_builtin)
+#if __has_builtin(__builtin_trap)
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define FU2_DETAIL_TRAP() __builtin_trap()
-#else
+#endif
+#endif
+#ifndef FU2_DETAIL_TRAP
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define FU2_DETAIL_TRAP() *(volatile int*)0x11 = 0
 #endif
@@ -417,9 +450,18 @@ union data_accessor {
 };
 
 /// See opcode::op_fetch_empty
-constexpr void write_empty(data_accessor* accessor, bool empty) noexcept {
+static FU2_CXX14_CONSTEXPR void write_empty(data_accessor* accessor, bool empty) noexcept {
   accessor->inplace_storage_ = std::size_t(empty);
 }
+
+#ifdef FU2_NO_CXX11_STD_ALIGN
+static inline void* align(size_t alignment, size_t size, void* ptr, size_t space) noexcept {
+  const auto raw_ptr = reinterpret_cast<size_t>(ptr);
+  const auto aligned_ptr = (raw_ptr + (alignment - 1u)) & -alignment;
+  size += aligned_ptr - raw_ptr;
+  return size > space ? nullptr : reinterpret_cast<void*>(aligned_ptr);
+}
+#endif
 
 template <typename From, typename To>
 using transfer_const_t =
@@ -432,14 +474,14 @@ using transfer_volatile_t =
 
 /// The retriever when the object is allocated inplace
 template <typename T, typename Accessor>
-constexpr auto retrieve(std::true_type /*is_inplace*/, Accessor from,
+FU2_CXX14_CONSTEXPR auto retrieve(std::true_type /*is_inplace*/, Accessor from,
                         std::size_t from_capacity) {
   using type = transfer_const_t<Accessor, transfer_volatile_t<Accessor, void>>*;
 
   /// Process the command by using the data inside the internal capacity
   auto storage = &(from->inplace_storage_);
   auto inplace = const_cast<void*>(static_cast<type>(storage));
-  return type(std::align(alignof(T), sizeof(T), inplace, from_capacity));
+  return type(align(alignof(T), sizeof(T), inplace, from_capacity));
 }
 
 /// The retriever which is used when the object is allocated
@@ -1053,13 +1095,13 @@ class internal_capacity_holder {
 public:
   constexpr internal_capacity_holder() = default;
 
-  constexpr data_accessor* opaque_ptr() noexcept {
+  FU2_CXX14_CONSTEXPR data_accessor* opaque_ptr() noexcept {
     return &storage_.accessor_;
   }
   constexpr data_accessor const* opaque_ptr() const noexcept {
     return &storage_.accessor_;
   }
-  constexpr data_accessor volatile* opaque_ptr() volatile noexcept {
+  FU2_CXX14_CONSTEXPR data_accessor volatile* opaque_ptr() volatile noexcept {
     return &storage_.accessor_;
   }
   constexpr data_accessor const volatile* opaque_ptr() const volatile noexcept {
@@ -1089,34 +1131,34 @@ public:
     return internal_capacity_holder<typename Config::capacity>::capacity();
   }
 
-  constexpr erasure() noexcept {
+  FU2_CXX14_CONSTEXPR erasure() noexcept {
     vtable_.set_empty();
   }
 
-  constexpr erasure(std::nullptr_t) noexcept {
+  FU2_CXX14_CONSTEXPR erasure(std::nullptr_t) noexcept {
     vtable_.set_empty();
   }
 
-  constexpr erasure(erasure&& right) noexcept(
+  FU2_CXX14_CONSTEXPR erasure(erasure&& right) noexcept(
       Property::is_strong_exception_guaranteed) {
     right.vtable_.move(vtable_, right.opaque_ptr(), right.capacity(),
                        this->opaque_ptr(), capacity());
   }
 
-  constexpr erasure(erasure const& right) {
+  FU2_CXX14_CONSTEXPR erasure(erasure const& right) {
     right.vtable_.copy(vtable_, right.opaque_ptr(), right.capacity(),
                        this->opaque_ptr(), capacity());
   }
 
   template <typename OtherConfig>
-  constexpr erasure(erasure<true, OtherConfig, Property> right) noexcept(
+  FU2_CXX14_CONSTEXPR erasure(erasure<true, OtherConfig, Property> right) noexcept(
       Property::is_strong_exception_guaranteed) {
     right.vtable_.move(vtable_, right.opaque_ptr(), right.capacity(),
                        this->opaque_ptr(), capacity());
   }
 
   template <typename T, typename Allocator = std::allocator<std::decay_t<T>>>
-  constexpr erasure(std::false_type /*use_bool_op*/, T&& callable,
+  FU2_CXX14_CONSTEXPR erasure(std::false_type /*use_bool_op*/, T&& callable,
                     Allocator&& allocator = Allocator{}) {
     vtable_t::init(vtable_,
                    type_erasure::make_box(
@@ -1126,7 +1168,7 @@ public:
                    this->opaque_ptr(), capacity());
   }
   template <typename T, typename Allocator = std::allocator<std::decay_t<T>>>
-  constexpr erasure(std::true_type /*use_bool_op*/, T&& callable,
+  FU2_CXX14_CONSTEXPR erasure(std::true_type /*use_bool_op*/, T&& callable,
                     Allocator&& allocator = Allocator{}) {
     if (bool(callable)) {
       vtable_t::init(vtable_,
@@ -1144,13 +1186,13 @@ public:
     vtable_.weak_destroy(this->opaque_ptr(), capacity());
   }
 
-  constexpr erasure&
+  FU2_CXX14_CONSTEXPR erasure&
   operator=(std::nullptr_t) noexcept(Property::is_strong_exception_guaranteed) {
     vtable_.destroy(this->opaque_ptr(), capacity());
     return *this;
   }
 
-  constexpr erasure& operator=(erasure&& right) noexcept(
+  FU2_CXX14_CONSTEXPR erasure& operator=(erasure&& right) noexcept(
       Property::is_strong_exception_guaranteed) {
     vtable_.weak_destroy(this->opaque_ptr(), capacity());
     right.vtable_.move(vtable_, right.opaque_ptr(), right.capacity(),
@@ -1158,7 +1200,7 @@ public:
     return *this;
   }
 
-  constexpr erasure& operator=(erasure const& right) {
+  FU2_CXX14_CONSTEXPR erasure& operator=(erasure const& right) {
     vtable_.weak_destroy(this->opaque_ptr(), capacity());
     right.vtable_.copy(vtable_, right.opaque_ptr(), right.capacity(),
                        this->opaque_ptr(), capacity());
@@ -1166,7 +1208,7 @@ public:
   }
 
   template <typename OtherConfig>
-  constexpr erasure&
+  FU2_CXX14_CONSTEXPR erasure&
   operator=(erasure<true, OtherConfig, Property> right) noexcept(
       Property::is_strong_exception_guaranteed) {
     vtable_.weak_destroy(this->opaque_ptr(), capacity());
@@ -1271,7 +1313,7 @@ public:
   }
   template <typename T>
   // NOLINTNEXTLINE(cppcoreguidlines-pro-type-member-init)
-  constexpr erasure(std::true_type use_bool_op, T&& object) {
+  FU2_CXX14_CONSTEXPR erasure(std::true_type use_bool_op, T&& object) {
     this->assign(use_bool_op, std::forward<T>(object));
   }
 
@@ -1485,15 +1527,15 @@ public:
   function() = default;
   ~function() = default;
 
-  explicit constexpr function(function const& /*right*/) = default;
-  explicit constexpr function(function&& /*right*/) = default;
+  explicit FU2_CXX14_CONSTEXPR function(function const& /*right*/) = default;
+  explicit FU2_CXX14_CONSTEXPR function(function&& /*right*/) = default;
 
   /// Copy construction from another copyable function
   template <typename RightConfig,
             std::enable_if_t<RightConfig::is_copyable>* = nullptr,
             enable_if_copyable_correct_t<Config, RightConfig>* = nullptr,
             enable_if_owning_correct_t<Config, RightConfig>* = nullptr>
-  constexpr function(function<RightConfig, property_t> const& right)
+  FU2_CXX14_CONSTEXPR function(function<RightConfig, property_t> const& right)
       : erasure_(right.erasure_) {
   }
 
@@ -1501,7 +1543,7 @@ public:
   template <typename RightConfig,
             enable_if_copyable_correct_t<Config, RightConfig>* = nullptr,
             enable_if_owning_correct_t<Config, RightConfig>* = nullptr>
-  constexpr function(function<RightConfig, property_t>&& right)
+  FU2_CXX14_CONSTEXPR function(function<RightConfig, property_t>&& right)
       : erasure_(std::move(right.erasure_)) {
   }
 
@@ -1511,7 +1553,7 @@ public:
             enable_if_can_accept_all_t<T>* = nullptr,
             assert_wrong_copy_assign_t<T>* = nullptr,
             assert_no_strong_except_guarantee_t<T>* = nullptr>
-  constexpr function(T&& callable)
+  FU2_CXX14_CONSTEXPR function(T&& callable)
       : erasure_(use_bool_op<unrefcv_t<T>>{}, std::forward<T>(callable)) {
   }
   template <typename T, typename Allocator, //
@@ -1520,13 +1562,13 @@ public:
             enable_if_owning_t<T>* = nullptr,
             assert_wrong_copy_assign_t<T>* = nullptr,
             assert_no_strong_except_guarantee_t<T>* = nullptr>
-  constexpr function(T&& callable, Allocator&& allocator)
+  FU2_CXX14_CONSTEXPR function(T&& callable, Allocator&& allocator)
       : erasure_(use_bool_op<unrefcv_t<T>>{}, std::forward<T>(callable),
                  std::forward<Allocator>(allocator)) {
   }
 
   /// Empty constructs the function
-  constexpr function(std::nullptr_t np) : erasure_(np) {
+  FU2_CXX14_CONSTEXPR function(std::nullptr_t np) : erasure_(np) {
   }
 
   function& operator=(function const& /*right*/) = default;
