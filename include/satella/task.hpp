@@ -176,67 +176,22 @@ public:
     template <class _PF, class _F, enable_if_convertible_t<_PF, post_func_t> = nullptr>
     Task<invoke_result_t<_F, T&&>> then(
         bool immediately, _PF &&post_fn, _F &&func
-    ) && {
-        auto &&promise = Promise<invoke_result_t<_F, T&&>>();
-        auto &&future  = promise.get_future();
-        if (immediately) {
-            std::move(this->m_future).set_callback([
-                p = std::move(promise), fn = std::forward<_F>(func)
-            ](value_type &&value) mutable {
-                if (index(value) == 0) {
-                    std::move(p).set_exception(satella::get<0>(std::move(value)));
-                    return;
-                }
-                invoke_job(std::move(p), std::move(fn), satella::get<1>(std::move(value)));
-            });
-        } else {
-            std::move(this->m_future).set_callback([
-                post_fn, p = std::move(promise), fn = std::forward<_F>(func)
-            ](value_type &&value) mutable {
-                if (index(value) == 0) {
-                    std::move(p).set_exception(satella::get<0>(std::move(value)));
-                    return;
-                }
-                post_job(
-                    std::move(post_fn), std::move(p), std::move(fn),
-                    satella::get<1>(std::move(value))
-                );
-            });
-        }
-        return { std::forward<_PF>(post_fn), std::move(future) };
-    }
+    ) &&;
 
     template <class _PF, class _F, enable_if_convertible_t<_PF, post_func_t> = nullptr>
-    auto then(_PF &&post_fn, _F &&func)
-    && {
-        return std::move(*this).then(
-            false, std::forward<_PF>(post_fn), std::forward<_F>(func)
-        );
-    }
+    auto then(_PF &&post_fn, _F &&func) &&;
 
     template <class _F>
-    auto then(bool immediately, _F &&func)
-    && {
-        return std::move(*this).then(
-            immediately, std::move(this->m_post), std::forward<_F>(func)
-        );
-    }
+    auto then(bool immediately, _F &&func) &&;
 
     template <class _F>
-    auto then(_F &&func)
-    && {
-        return std::move(*this).then(
-            false, std::move(this->m_post), std::forward<_F>(func)
-        );
-    }
+    auto then(_F &&func) &&;
+
+    template <class _T, enable_if_t<std::is_same<T, Task<_T>>::value> = nullptr>
+    Task<_T> unwrap() &&;
 
     template <class _T, enable_if_convertible_t<_T, T> = nullptr>
-    operator Task<_T>()
-    && {
-        return std::move(*this).then(true, [](T &&value) -> _T {
-            return std::move(value);
-        });
-    }
+    operator Task<_T>() &&;
 };
 
 template <>
@@ -248,63 +203,174 @@ public:
     using TaskBase<void>::TaskBase;
 
     template <class _T>
-    Task(Task<_T> &&task):
-        Task(std::move(task).then(true, [](_T&&) { }))
-    { }
+    Task(Task<_T> &&task);
 
     template <class _PF, class _F, enable_if_convertible_t<_PF, post_func_t> = nullptr>
-    Task<invoke_result_t<_F>> then(bool immediately, _PF &&post_fn, _F &&func)
-    && {
-        auto &&promise = Promise<invoke_result_t<_F>>();
-        auto &&future  = promise.get_future();
-        if (immediately) {
-            std::move(this->m_future).set_callback([
-                p = std::move(promise), fn = std::forward<_F>(func)
-            ](value_type &&value) mutable {
-                if (value) {
-                    std::move(p).set_exception(std::move(value));
-                    return;
-                }
-                invoke_job(std::move(p), std::move(fn));
-            });
-        } else {
-            std::move(this->m_future).set_callback([
-                post_fn, p = std::move(promise), fn = std::forward<_F>(func)
-            ](value_type &&value) mutable {
-                if (value) {
-                    std::move(p).set_exception(std::move(value));
-                    return;
-                }
-                post_job(std::move(post_fn), std::move(p), std::move(fn));
-            });
-        }
-        return { std::forward<_PF>(post_fn), std::move(future) };
-    }
+    Task<invoke_result_t<_F>> then(bool immediately, _PF &&post_fn, _F &&func) &&;
 
     template <class _PF, class _F, enable_if_convertible_t<_PF, post_func_t> = nullptr>
-    auto then(_PF &&post_fn, _F &&func)
-    && {
-        return std::move(*this).then(
-            false, std::forward<_PF>(post_fn), std::forward<_F>(func)
-        );
-    }
+    auto then(_PF &&post_fn, _F &&func) &&;
 
     template <class _F>
-    auto then(bool immediately, _F &&func)
-    && {
-        return std::move(*this).then(
-            immediately, std::move(this->m_post), std::forward<_F>(func)
-        );
-    }
+    auto then(bool immediately, _F &&func) &&;
 
     template <class _F>
-    auto then(_F &&func)
-    && {
-        return std::move(*this).then(
-            false, std::move(this->m_post), std::forward<_F>(func)
-        );
-    }
+    auto then(_F &&func) &&;
 };
+
+template <class T>
+template <class _PF, class _F, enable_if_convertible_t<_PF, post_func_t>>
+Task<invoke_result_t<_F, T&&>> Task<T>::then(
+    bool immediately, _PF &&post_fn, _F &&func
+) && {
+    auto &&promise = Promise<invoke_result_t<_F, T&&>>();
+    auto &&future  = promise.get_future();
+    if (immediately) {
+        std::move(this->m_future).set_callback([
+            p = std::move(promise), fn = std::forward<_F>(func)
+        ](value_type &&value) mutable {
+            if (index(value) == 0) {
+                std::move(p).set_exception(satella::get<0>(std::move(value)));
+                return;
+            }
+            invoke_job(std::move(p), std::move(fn), satella::get<1>(std::move(value)));
+        });
+    } else {
+        std::move(this->m_future).set_callback([
+            post_fn, p = std::move(promise), fn = std::forward<_F>(func)
+        ](value_type &&value) mutable {
+            if (index(value) == 0) {
+                std::move(p).set_exception(satella::get<0>(std::move(value)));
+                return;
+            }
+            post_job(
+                std::move(post_fn), std::move(p), std::move(fn),
+                satella::get<1>(std::move(value))
+            );
+        });
+    }
+    return { std::forward<_PF>(post_fn), std::move(future) };
+}
+
+template <class T>
+template <class _PF, class _F, enable_if_convertible_t<_PF, post_func_t>>
+auto Task<T>::then(_PF &&post_fn, _F &&func)
+&& {
+    return std::move(*this).then(
+        false, std::forward<_PF>(post_fn), std::forward<_F>(func)
+    );
+}
+
+template <class T>
+template <class _F>
+auto Task<T>::then(bool immediately, _F &&func)
+&& {
+    return std::move(*this).then(
+        immediately, std::move(this->m_post), std::forward<_F>(func)
+    );
+}
+
+template <class T>
+template <class _F>
+auto Task<T>::then(_F &&func)
+&& {
+    return std::move(*this).then(
+        false, std::move(this->m_post), std::forward<_F>(func)
+    );
+}
+
+template <class T>
+template <class _T, enable_if_t<std::is_same<T, Task<_T>>::value>>
+Task<_T> Task<T>::unwrap()
+&& {
+    auto &&promise = Promise<_T>();
+    auto &&future  = promise.get_future();
+    std::move(this->m_future).set_callback([
+        p = std::move(promise)
+    ](value_type &&value) mutable {
+        if (index(value) == 0) {
+            std::move(p).set_exception(satella::get<0>(std::move(value)));
+            return;
+        }
+        satella::get<1>(std::move(value)).m_future.set_callback([
+            p = std::move(p)
+        ](typename Task<_T>::value_type &&value) mutable {
+            if (index(value) == 0) {
+                std::move(p).set_exception(satella::get<0>(std::move(value)));
+                return;
+            }
+            std::move(p).set_value(satella::get<1>(std::move(value)));
+        });
+    });
+    return { std::move(this->m_post), std::move(future) };
+}
+
+template <class T>
+template <class _T, enable_if_convertible_t<_T, T>>
+Task<T>::operator Task<_T>()
+&& {
+    return std::move(*this).then(true, [](T &&value) -> _T {
+        return std::move(value);
+    });
+}
+
+template <class _T>
+Task<void>::Task(Task<_T> &&task):
+    Task(std::move(task).then(true, [](_T&&) { }))
+{ }
+
+template <class _PF, class _F, enable_if_convertible_t<_PF, post_func_t>>
+Task<invoke_result_t<_F>> Task<void>::then(bool immediately, _PF &&post_fn, _F &&func)
+&& {
+    auto &&promise = Promise<invoke_result_t<_F>>();
+    auto &&future  = promise.get_future();
+    if (immediately) {
+        std::move(this->m_future).set_callback([
+            p = std::move(promise), fn = std::forward<_F>(func)
+        ](value_type &&value) mutable {
+            if (value) {
+                std::move(p).set_exception(std::move(value));
+                return;
+            }
+            invoke_job(std::move(p), std::move(fn));
+        });
+    } else {
+        std::move(this->m_future).set_callback([
+            post_fn, p = std::move(promise), fn = std::forward<_F>(func)
+        ](value_type &&value) mutable {
+            if (value) {
+                std::move(p).set_exception(std::move(value));
+                return;
+            }
+            post_job(std::move(post_fn), std::move(p), std::move(fn));
+        });
+    }
+    return { std::forward<_PF>(post_fn), std::move(future) };
+}
+
+template <class _PF, class _F, enable_if_convertible_t<_PF, post_func_t>>
+auto Task<void>::then(_PF &&post_fn, _F &&func)
+&& {
+    return std::move(*this).then(
+        false, std::forward<_PF>(post_fn), std::forward<_F>(func)
+    );
+}
+
+template <class _F>
+auto Task<void>::then(bool immediately, _F &&func)
+&& {
+    return std::move(*this).then(
+        immediately, std::move(this->m_post), std::forward<_F>(func)
+    );
+}
+
+template <class _F>
+auto Task<void>::then(_F &&func)
+&& {
+    return std::move(*this).then(
+        false, std::move(this->m_post), std::forward<_F>(func)
+    );
+}
 
 } // namespace impl
 
